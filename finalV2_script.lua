@@ -128,17 +128,24 @@ local function launchDoW()
     end
 
     local function updateTargets()
-        targets = {}
-        for _, p in pairs(Players:GetPlayers()) do
-            if p ~= LocalPlayer and p.Team ~= LocalPlayer.Team and p.Character and p.Character:FindFirstChild("Head") then
-                local head = p.Character.Head
-                local dist = (Camera.CFrame.Position - head.Position).Magnitude
-                if dist <= aimDistance and isVisible(head) then
-                    table.insert(targets, p)
+    targets = {}
+    for _, p in pairs(Players:GetPlayers()) do
+        if p ~= LocalPlayer and p.Team ~= LocalPlayer.Team and p.Character and p.Character:FindFirstChild("Head") then
+            local humanoid = p.Character:FindFirstChildOfClass("Humanoid")
+            if humanoid and humanoid.Health > 0 then -- only alive players
+                local dist = (Camera.CFrame.Position - p.Character.Head.Position).Magnitude
+                if dist <= aimDistance then
+                    local ray = Ray.new(Camera.CFrame.Position, (p.Character.Head.Position - Camera.CFrame.Position).Unit * dist)
+                    local hitPart = workspace:FindPartOnRay(ray, LocalPlayer.Character, false, true)
+                    if hitPart and hitPart:IsDescendantOf(p.Character) then
+                        table.insert(targets, p)
+                    end
                 end
             end
         end
     end
+end
+
 
     local function aimAt(p)
         if p and p.Character and p.Character:FindFirstChild("Head") then
@@ -203,12 +210,19 @@ local function launchDoW()
     end
 
     createCtrlButton("🎯 Nearest", UDim2.new(0, 10, 0, 110), function()
-        updateTargets()
-        if #targets > 0 then
-            currentIndex = 1
-            aimAt(targets[currentIndex])
-        end
-    end)
+    updateTargets()
+    if #targets > 0 then
+        -- Sort targets by distance from camera to head
+        table.sort(targets, function(a, b)
+            local da = (Camera.CFrame.Position - a.Character.Head.Position).Magnitude
+            local db = (Camera.CFrame.Position - b.Character.Head.Position).Magnitude
+            return da < db
+        end)
+        currentIndex = 1
+        aimAt(targets[currentIndex])
+    end
+end)
+
 
     createCtrlButton("⏮️ Previous", UDim2.new(0, 160, 0, 110), function()
         updateTargets()
