@@ -24,6 +24,14 @@ MainFrame.BorderSizePixel = 0
 MainFrame.Active = true
 MainFrame.Draggable = true
 
+local MinimizeCircle = Instance.new("ImageButton", ScreenGui)
+MinimizeCircle.Size = UDim2.new(0, 40, 0, 40)
+MinimizeCircle.Position = UDim2.new(0.05, 0, 0.1, 0)
+MinimizeCircle.BackgroundTransparency = 1
+MinimizeCircle.Image = "rbxassetid://3570695787"
+MinimizeCircle.ImageColor3 = Color3.fromRGB(100, 100, 100)
+MinimizeCircle.Visible = false
+
 local Title = Instance.new("TextLabel", MainFrame)
 Title.Text = "Game Script Panel"
 Title.Size = UDim2.new(1, 0, 0, 30)
@@ -44,34 +52,22 @@ local function createButton(name, posY, callback)
     button.BorderSizePixel = 0
     button.AutoButtonColor = true
     button.AnchorPoint = Vector2.new(0.5, 0.5)
-    button.MouseButton1Click:Connect(function()
-        callback()
-    end)
+    button.MouseButton1Click:Connect(callback)
     return button
 end
 
 local Minimized = false
 local MinimizeButton = createButton("-", 35, function()
-    Minimized = not Minimized
-    for _, child in ipairs(MainFrame:GetChildren()) do
-        if child:IsA("TextButton") and child ~= MinimizeButton then
-            child.Visible = not Minimized
-        end
-    end
-    -- Circular transition effect
-    local tween = TweenService:Create(
-        MinimizeButton,
-        TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.InOut),
-        {
-            Rotation = Minimized and 180 or 0,
-            Size = Minimized and UDim2.new(0, 40, 0, 40) or UDim2.new(1, -20, 0, 40),
-            BackgroundColor3 = Minimized and Color3.fromRGB(70, 70, 70) or Color3.fromRGB(50, 50, 50)
-        }
-    )
-    tween:Play()
-    MinimizeButton.Text = Minimized and "+" or "-"
+    Minimized = true
+    MainFrame.Visible = false
+    MinimizeCircle.Visible = true
 end)
-MinimizeButton.Rotation = 0
+
+MinimizeCircle.MouseButton1Click:Connect(function()
+    Minimized = false
+    MainFrame.Visible = true
+    MinimizeCircle.Visible = false
+end)
 
 local DoWButton = createButton("DoW Mode", 80, function()
     activeMode = "DoW"
@@ -135,13 +131,13 @@ local function isBehindWall(target)
     return hit and hit:IsDescendantOf(target.Parent) == false
 end
 
--- AUTO AIM
+-- AUTO AIM (choose nearest visible enemy)
 local function getNearestEnemy()
     local closest, distance = nil, aimDistance
     for _, player in ipairs(Players:GetPlayers()) do
         if player ~= LocalPlayer and player.Character and player.Team ~= LocalPlayer.Team then
             local head = player.Character:FindFirstChild("Head")
-            if head then
+            if head and not isBehindWall(head) then
                 local dist = (head.Position - Camera.CFrame.Position).Magnitude
                 if dist < distance then
                     closest = head
@@ -156,15 +152,25 @@ end
 -- UI SCRIPT LOGIC
 local currentTarget = nil
 local highlights = {}
+local frameCounter = 0
 
 RunService.RenderStepped:Connect(function()
+    frameCounter += 1
+    if frameCounter % 2 ~= 0 then return end -- run at ~30 FPS
+
     PlayerListFrame.Visible = activeMode == "GoG"
+    for _, highlight in pairs(highlights) do
+        if highlight and highlight.Parent then
+            highlight:Destroy()
+        end
+    end
+    highlights = {}
+
     if activeMode == "DoW" then
         for _, player in ipairs(Players:GetPlayers()) do
             if player ~= LocalPlayer and player.Character then
                 local head = player.Character:FindFirstChild("Head")
                 if head then
-                    if highlights[player] then highlights[player]:Destroy() end
                     local color = player.Team == LocalPlayer.Team and Color3.fromRGB(0,0,255) or Color3.fromRGB(255,0,0)
                     if player.Team ~= LocalPlayer.Team and isBehindWall(head) then
                         color = Color3.fromRGB(0,255,0)
@@ -173,31 +179,27 @@ RunService.RenderStepped:Connect(function()
                 end
             end
         end
+
         currentTarget = getNearestEnemy()
-        if currentTarget then
-            Camera.CFrame = CFrame.new(Camera.CFrame.Position, currentTarget.Position)
+        if currentTarget and currentTarget.Parent then
+            Camera.CFrame = Camera.CFrame:Lerp(CFrame.new(Camera.CFrame.Position, currentTarget.Position), 0.25)
         end
 
     elseif activeMode == "GoG" then
         updatePlayerList()
         for _, player in ipairs(Players:GetPlayers()) do
             if player ~= LocalPlayer and player.Character and not excludedPlayers[player] then
-                if highlights[player] then highlights[player]:Destroy() end
                 highlights[player] = createHighlight(player.Character, Color3.fromRGB(0,255,0))
-            elseif highlights[player] then
-                highlights[player]:Destroy()
-                highlights[player] = nil
             end
         end
 
     elseif activeMode == "HnS" then
         for _, player in ipairs(Players:GetPlayers()) do
             if player ~= LocalPlayer and player.Character then
-                if highlights[player] then highlights[player]:Destroy() end
                 highlights[player] = createHighlight(player.Character, Color3.fromRGB(0,0,255))
             end
         end
     end
 end)
 
-print("Universal Game Script UI Loaded — Upgraded Edition!")
+print("Universal Game Script UI Loaded — Ultra Smooth Edition!")
