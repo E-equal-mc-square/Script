@@ -1,4 +1,4 @@
--- Universal Game Script UI with DoW, GoG, and H&S modes
+-- Universal Game Script UI with DoW, GoG, and H&S modes (Floating Window Upgrade)
 
 -- SERVICES
 local Players = game:GetService("Players")
@@ -24,13 +24,14 @@ MainFrame.BorderSizePixel = 0
 MainFrame.Active = true
 MainFrame.Draggable = true
 
-local MinimizeCircle = Instance.new("ImageButton", ScreenGui)
-MinimizeCircle.Size = UDim2.new(0, 40, 0, 40)
-MinimizeCircle.Position = UDim2.new(0.05, 0, 0.1, 0)
-MinimizeCircle.BackgroundTransparency = 1
-MinimizeCircle.Image = "rbxassetid://3570695787"
-MinimizeCircle.ImageColor3 = Color3.fromRGB(100, 100, 100)
-MinimizeCircle.Visible = false
+local FloatingCircle = Instance.new("ImageButton", ScreenGui)
+FloatingCircle.Size = UDim2.new(0, 40, 0, 40)
+FloatingCircle.Position = UDim2.new(0.05, 0, 0.1, 0)
+FloatingCircle.BackgroundTransparency = 1
+FloatingCircle.Image = "rbxassetid://3570695787"
+FloatingCircle.ImageColor3 = Color3.fromRGB(80, 180, 255)
+FloatingCircle.Visible = false
+FloatingCircle.ZIndex = 10
 
 local Title = Instance.new("TextLabel", MainFrame)
 Title.Text = "Game Script Panel"
@@ -51,7 +52,7 @@ local function createButton(name, posY, callback)
     button.TextSize = 16
     button.BorderSizePixel = 0
     button.AutoButtonColor = true
-    button.AnchorPoint = Vector2.new(0.5, 0.5)
+    button.AnchorPoint = Vector2.new(0, 0)
     button.MouseButton1Click:Connect(callback)
     return button
 end
@@ -60,13 +61,13 @@ local Minimized = false
 local MinimizeButton = createButton("-", 35, function()
     Minimized = true
     MainFrame.Visible = false
-    MinimizeCircle.Visible = true
+    FloatingCircle.Visible = true
 end)
 
-MinimizeCircle.MouseButton1Click:Connect(function()
+FloatingCircle.MouseButton1Click:Connect(function()
     Minimized = false
     MainFrame.Visible = true
-    MinimizeCircle.Visible = false
+    FloatingCircle.Visible = false
 end)
 
 local DoWButton = createButton("DoW Mode", 80, function()
@@ -125,10 +126,9 @@ end
 
 local function isBehindWall(target)
     local origin = Camera.CFrame.Position
-    local targetPos = target.Position
-    local ray = Ray.new(origin, (targetPos - origin).Unit * aimDistance)
-    local hit = workspace:FindPartOnRayWithIgnoreList(ray, {LocalPlayer.Character})
-    return hit and hit:IsDescendantOf(target.Parent) == false
+    local direction = (target.Position - origin).Unit * aimDistance
+    local raycast = workspace:Raycast(origin, direction, RaycastParams.new())
+    return raycast and raycast.Instance and not raycast.Instance:IsDescendantOf(target.Parent)
 end
 
 -- AUTO AIM (choose nearest visible enemy)
@@ -137,7 +137,7 @@ local function getNearestEnemy()
     for _, player in ipairs(Players:GetPlayers()) do
         if player ~= LocalPlayer and player.Character and player.Team ~= LocalPlayer.Team then
             local head = player.Character:FindFirstChild("Head")
-            if head and not isBehindWall(head) then
+            if head and not isBehindWall(head) and player.Character:FindFirstChild("Humanoid") and player.Character.Humanoid.Health > 0 then
                 local dist = (head.Position - Camera.CFrame.Position).Magnitude
                 if dist < distance then
                     closest = head
@@ -170,11 +170,8 @@ RunService.RenderStepped:Connect(function()
         for _, player in ipairs(Players:GetPlayers()) do
             if player ~= LocalPlayer and player.Character then
                 local head = player.Character:FindFirstChild("Head")
-                if head then
+                if head and not isBehindWall(head) and player.Character:FindFirstChild("Humanoid") and player.Character.Humanoid.Health > 0 then
                     local color = player.Team == LocalPlayer.Team and Color3.fromRGB(0,0,255) or Color3.fromRGB(255,0,0)
-                    if player.Team ~= LocalPlayer.Team and isBehindWall(head) then
-                        color = Color3.fromRGB(0,255,0)
-                    end
                     highlights[player] = createHighlight(player.Character, color)
                 end
             end
@@ -182,7 +179,7 @@ RunService.RenderStepped:Connect(function()
 
         currentTarget = getNearestEnemy()
         if currentTarget and currentTarget.Parent then
-            Camera.CFrame = Camera.CFrame:Lerp(CFrame.new(Camera.CFrame.Position, currentTarget.Position), 0.25)
+            Camera.CFrame = Camera.CFrame:Lerp(CFrame.new(Camera.CFrame.Position, currentTarget.Position), 0.2)
         end
 
     elseif activeMode == "GoG" then
@@ -202,4 +199,4 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
-print("Universal Game Script UI Loaded — Ultra Smooth Edition!")
+print("Universal Game Script UI Loaded — Floating Window Ready!")
