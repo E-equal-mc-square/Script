@@ -8,6 +8,7 @@ local LocalPlayer = Players.LocalPlayer
 local aimDistance = 250
 local excludedPlayers = {}
 local AimEnabled = false
+local WallbangEnabled = false
 
 -- GUI Setup
 local ScreenGui = Instance.new("ScreenGui")
@@ -15,20 +16,49 @@ ScreenGui.Name = "DogsOfWarAimbot"
 ScreenGui.ResetOnSpawn = false
 ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
 
-local ToggleBtn = Instance.new("TextButton")
-ToggleBtn.Size = UDim2.new(0, 120, 0, 40)
-ToggleBtn.Position = UDim2.new(0.01, 0, 0.25, 0)
-ToggleBtn.Text = "Auto Aim [OFF]"
-ToggleBtn.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
-ToggleBtn.TextColor3 = Color3.new(1, 1, 1)
-ToggleBtn.TextScaled = true
-ToggleBtn.BorderSizePixel = 0
-ToggleBtn.Parent = ScreenGui
+-- Aim Button
+local ToggleAimBtn = Instance.new("TextButton")
+ToggleAimBtn.Size = UDim2.new(0, 120, 0, 40)
+ToggleAimBtn.Position = UDim2.new(0.01, 0, 0.25, 0)
+ToggleAimBtn.Text = "Auto Aim [OFF]"
+ToggleAimBtn.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+ToggleAimBtn.TextColor3 = Color3.new(1, 1, 1)
+ToggleAimBtn.TextScaled = true
+ToggleAimBtn.BorderSizePixel = 0
+ToggleAimBtn.Parent = ScreenGui
 
-ToggleBtn.MouseButton1Click:Connect(function()
+ToggleAimBtn.MouseButton1Click:Connect(function()
     AimEnabled = not AimEnabled
-    ToggleBtn.Text = "Auto Aim [" .. (AimEnabled and "ON" or "OFF") .. "]"
+    ToggleAimBtn.Text = "Auto Aim [" .. (AimEnabled and "ON" or "OFF") .. "]"
 end)
+
+-- Wallbang Button
+local WallbangBtn = Instance.new("TextButton")
+WallbangBtn.Size = UDim2.new(0, 120, 0, 40)
+WallbangBtn.Position = UDim2.new(0.01, 0, 0.35, 0)
+WallbangBtn.Text = "Wallbang [OFF]"
+WallbangBtn.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+WallbangBtn.TextColor3 = Color3.new(1, 1, 1)
+WallbangBtn.TextScaled = true
+WallbangBtn.BorderSizePixel = 0
+WallbangBtn.Parent = ScreenGui
+
+WallbangBtn.MouseButton1Click:Connect(function()
+    WallbangEnabled = not WallbangEnabled
+    WallbangBtn.Text = "Wallbang [" .. (WallbangEnabled and "ON" or "OFF") .. "]"
+end)
+
+-- damageCharacter Finder
+local damageCharacter = nil
+for i, v in pairs(getgc(true)) do
+    if typeof(v) == "function" and islclosure(v) then
+        local info = debug.getinfo(v)
+        if info.name == "damageCharacter" then
+            damageCharacter = v
+            break
+        end
+    end
+end
 
 -- Visibility Check
 local function isVisible(character)
@@ -45,8 +75,8 @@ local function isVisible(character)
     return result and result.Instance and result.Instance:IsDescendantOf(character)
 end
 
--- Find Closest Visible Target (Only if showing "!")
-local function getClosestTarget()
+-- Get Closest Visible Target (showing "!")
+local function getClosestVisibleTarget()
     local closest, shortestDistance = nil, aimDistance + 1
     for _, player in ipairs(Players:GetPlayers()) do
         if player ~= LocalPlayer and not excludedPlayers[player.Name] and player.Team ~= LocalPlayer.Team then
@@ -68,7 +98,25 @@ local function getClosestTarget()
     return closest
 end
 
--- ESP Highlighting
+-- Get Closest Enemy (any, including behind walls)
+local function getClosestEnemy()
+    local closest, shortestDist = nil, math.huge
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Team ~= LocalPlayer.Team then
+            local char = player.Character
+            if char and char:FindFirstChild("Humanoid") and char.Humanoid.Health > 0 and char:FindFirstChild("Head") then
+                local dist = (Camera.CFrame.Position - char.Head.Position).Magnitude
+                if dist < shortestDist then
+                    closest = char
+                    shortestDist = dist
+                end
+            end
+        end
+    end
+    return closest
+end
+
+-- ESP Highlighting (unchanged)
 local function refreshESP()
     for _, player in pairs(Players:GetPlayers()) do
         if player ~= LocalPlayer and player.Character then
@@ -122,43 +170,37 @@ local function refreshESP()
     end
 end
 
--- Add Jump Button (with 190 jump power = 90 + 100)
-local function addJumpButton()
-    local jumpBtn = Instance.new("TextButton")
-    jumpBtn.Size = UDim2.new(0, 80, 0, 80)
-    jumpBtn.Position = UDim2.new(1, -90, 1, -90)
-    jumpBtn.AnchorPoint = Vector2.new(0, 0)
-    jumpBtn.Text = "Jump"
-    jumpBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-    jumpBtn.TextColor3 = Color3.new(1, 1, 1)
-    jumpBtn.TextScaled = true
-    jumpBtn.BorderSizePixel = 0
-    jumpBtn.Parent = ScreenGui
-
-    jumpBtn.MouseButton1Click:Connect(function()
-        local char = LocalPlayer.Character
-        if char and char:FindFirstChild("Humanoid") then
-            local humanoid = char.Humanoid
-            local originalJumpPower = humanoid.JumpPower
-            humanoid.JumpPower = 190 -- updated jump power
-            humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
-            task.delay(0.5, function()
-                if humanoid then
-                    humanoid.JumpPower = originalJumpPower
-                end
-            end)
-        end
-    end)
-end
-addJumpButton()
-
 -- Main Loop
 RunService.RenderStepped:Connect(function()
     refreshESP()
+
     if AimEnabled then
-        local targetHead = getClosestTarget()
+        local targetHead = nil
+        if WallbangEnabled then
+            -- Wallbang ON: prefer visible target, else closest behind wall
+            targetHead = getClosestVisibleTarget()
+            if not targetHead then
+                local enemyChar = getClosestEnemy()
+                if enemyChar then
+                    targetHead = enemyChar:FindFirstChild("Head")
+                end
+            end
+        else
+            -- Wallbang OFF: only visible target
+            targetHead = getClosestVisibleTarget()
+        end
+
         if targetHead and Camera then
             Camera.CFrame = CFrame.new(Camera.CFrame.Position, targetHead.Position)
+        end
+    end
+
+    if WallbangEnabled and damageCharacter then
+        local enemy = getClosestEnemy()
+        if enemy then
+            pcall(function()
+                damageCharacter(enemy)
+            end)
         end
     end
 end)
