@@ -1,158 +1,66 @@
--- Universal Game Script UI with DoW, GoG, and H&S modes (Fixed UI, Player Toggle, Floating Bubble)
-
 -- SERVICES
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
-local TweenService = game:GetService("TweenService")
 local Camera = workspace.CurrentCamera
 local LocalPlayer = Players.LocalPlayer
 
 -- SETTINGS
 local aimDistance = 250
 local excludedPlayers = {}
-local activeMode = ""
+local AimEnabled = false
 
--- GUI CREATION
-local ScreenGui = Instance.new("ScreenGui", game.CoreGui)
-ScreenGui.Name = "UniversalGameScriptUI"
+-- GUI Setup
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "DogsOfWarAimbot"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
 
-local MainFrame = Instance.new("Frame", ScreenGui)
-MainFrame.Position = UDim2.new(0.05, 0, 0.1, 0)
-MainFrame.Size = UDim2.new(0, 240, 0, 360)
-MainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-MainFrame.BorderSizePixel = 0
-MainFrame.Active = true
-MainFrame.Draggable = true
-MainFrame.ClipsDescendants = true
-MainFrame.AnchorPoint = Vector2.new(0, 0)
-MainFrame.ZIndex = 2
+local ToggleBtn = Instance.new("TextButton")
+ToggleBtn.Size = UDim2.new(0, 120, 0, 40)
+ToggleBtn.Position = UDim2.new(0.01, 0, 0.25, 0)
+ToggleBtn.Text = "Auto Aim [OFF]"
+ToggleBtn.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+ToggleBtn.TextColor3 = Color3.new(1, 1, 1)
+ToggleBtn.TextScaled = true
+ToggleBtn.BorderSizePixel = 0
+ToggleBtn.Parent = ScreenGui
 
-local FloatingCircle = Instance.new("ImageButton", ScreenGui)
-FloatingCircle.Size = UDim2.new(0, 40, 0, 40)
-FloatingCircle.Position = UDim2.new(0.05, 0, 0.1, 0)
-FloatingCircle.BackgroundTransparency = 1
-FloatingCircle.Image = "rbxassetid://3570695787"
-FloatingCircle.ImageColor3 = Color3.fromRGB(80, 180, 255)
-FloatingCircle.Visible = false
-FloatingCircle.ZIndex = 10
-
-local Title = Instance.new("TextLabel", MainFrame)
-Title.Text = "Game Script Panel"
-Title.Size = UDim2.new(1, 0, 0, 30)
-Title.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-Title.TextColor3 = Color3.fromRGB(255, 255, 255)
-Title.Font = Enum.Font.SourceSansBold
-Title.TextSize = 18
-Title.BorderSizePixel = 0
-
-local buttonYOffset = 40
-local function createButton(name, order, callback)
-    local button = Instance.new("TextButton", MainFrame)
-    button.Text = name
-    button.Size = UDim2.new(1, -20, 0, 35)
-    button.Position = UDim2.new(0, 10, 0, order * buttonYOffset + 30)
-    button.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
-    button.TextColor3 = Color3.fromRGB(255, 255, 255)
-    button.Font = Enum.Font.Gotham
-    button.TextSize = 16
-    button.BorderSizePixel = 0
-    button.AutoButtonColor = true
-    button.ZIndex = 2
-    button.MouseButton1Click:Connect(callback)
-    return button
-end
-
-local Minimized = false
-local MinimizeButton = createButton("-", 0, function()
-    Minimized = true
-    MainFrame.Visible = false
-    FloatingCircle.Visible = true
+ToggleBtn.MouseButton1Click:Connect(function()
+    AimEnabled = not AimEnabled
+    ToggleBtn.Text = "Auto Aim [" .. (AimEnabled and "ON" or "OFF") .. "]"
 end)
 
-FloatingCircle.MouseButton1Click:Connect(function()
-    Minimized = false
-    MainFrame.Visible = true
-    FloatingCircle.Visible = false
-end)
-
-local DoWButton = createButton("DoW Mode", 1, function()
-    activeMode = "DoW"
-end)
-
-local GoGButton = createButton("GoG Mode", 2, function()
-    activeMode = "GoG"
-end)
-
-local HnSButton = createButton("H&S Mode", 3, function()
-    activeMode = "HnS"
-end)
-
--- PLAYER LIST PANEL FOR GoG
-local PlayerListFrame = Instance.new("ScrollingFrame", MainFrame)
-PlayerListFrame.Position = UDim2.new(0, 10, 0, 200)
-PlayerListFrame.Size = UDim2.new(1, -20, 0, 140)
-PlayerListFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
-PlayerListFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
-PlayerListFrame.BorderSizePixel = 0
-PlayerListFrame.Visible = false
-PlayerListFrame.ScrollBarThickness = 6
-
-local function updatePlayerList()
-    PlayerListFrame:ClearAllChildren()
-    local y = 0
-    for _, player in ipairs(Players:GetPlayers()) do
-        if player ~= LocalPlayer then
-            local uid = player.UserId
-            local btn = Instance.new("TextButton", PlayerListFrame)
-            btn.Size = UDim2.new(1, 0, 0, 30)
-            btn.Position = UDim2.new(0, 0, 0, y)
-            btn.Text = excludedPlayers[uid] and ("Enable " .. player.Name) or ("Exclude " .. player.Name)
-            btn.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
-            btn.TextColor3 = Color3.fromRGB(255, 255, 255)
-            btn.Font = Enum.Font.Gotham
-            btn.TextSize = 14
-            btn.MouseButton1Click:Connect(function()
-                excludedPlayers[uid] = not excludedPlayers[uid]
-                updatePlayerList()
-            end)
-            y = y + 32
-        end
-    end
-    PlayerListFrame.CanvasSize = UDim2.new(0, 0, 0, y)
-end
-
--- ESP FUNCTION
-local function createHighlight(target, color)
-    local highlight = Instance.new("Highlight")
-    highlight.Adornee = target
-    highlight.FillColor = color
-    highlight.FillTransparency = 0.3
-    highlight.OutlineColor = Color3.new(1,1,1)
-    highlight.OutlineTransparency = 0.4
-    highlight.Parent = target
-    return highlight
-end
-
-local function isBehindWall(target)
+-- Visibility Check
+local function isVisible(character)
+    local head = character:FindFirstChild("Head")
+    if not head then return false end
     local origin = Camera.CFrame.Position
-    local direction = (target.Position - origin).Unit * aimDistance
-    local ray = Ray.new(origin, direction)
-    local hit = workspace:FindPartOnRayWithIgnoreList(ray, {LocalPlayer.Character})
-    return hit and not hit:IsDescendantOf(target.Parent)
+    local direction = (head.Position - origin).Unit * aimDistance
+
+    local raycastParams = RaycastParams.new()
+    raycastParams.FilterDescendantsInstances = {LocalPlayer.Character}
+    raycastParams.FilterType = Enum.RaycastFilterType.Blacklist
+
+    local result = workspace:Raycast(origin, direction, raycastParams)
+    return result and result.Instance and result.Instance:IsDescendantOf(character)
 end
 
--- AUTO AIM (choose nearest visible enemy)
-local function getNearestEnemy()
-    local closest, distance = nil, aimDistance
+-- Find Closest Visible Target (Only if showing "!")
+local function getClosestTarget()
+    local closest, shortestDistance = nil, aimDistance + 1
     for _, player in ipairs(Players:GetPlayers()) do
-        if player ~= LocalPlayer and player.Character and player.Team ~= LocalPlayer.Team then
-            local head = player.Character:FindFirstChild("Head")
-            local hum = player.Character:FindFirstChild("Humanoid")
-            if head and hum and hum.Health > 0 and not isBehindWall(head) then
-                local dist = (head.Position - Camera.CFrame.Position).Magnitude
-                if dist < distance then
-                    closest = head
-                    distance = dist
+        if player ~= LocalPlayer and not excludedPlayers[player.Name] and player.Team ~= LocalPlayer.Team then
+            local char = player.Character
+            if char then
+                local humanoid = char:FindFirstChild("Humanoid")
+                local head = char:FindFirstChild("Head")
+                local alert = head and head:FindFirstChild("EnemyAlert")
+                if humanoid and humanoid.Health > 0 and head and alert then
+                    local dist = (head.Position - Camera.CFrame.Position).Magnitude
+                    if dist < shortestDistance then
+                        closest = head
+                        shortestDistance = dist
+                    end
                 end
             end
         end
@@ -160,56 +68,97 @@ local function getNearestEnemy()
     return closest
 end
 
--- UI SCRIPT LOGIC
-local currentTarget = nil
-local highlights = {}
-local frameCounter = 0
+-- ESP Highlighting
+local function refreshESP()
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character then
+            local char = player.Character
+            local head = char:FindFirstChild("Head")
+            local humanoid = char:FindFirstChild("Humanoid")
+            if humanoid and humanoid.Health > 0 and head then
+                if char:FindFirstChild("ESP_Highlight") then
+                    char.ESP_Highlight:Destroy()
+                end
+                local hl = Instance.new("Highlight")
+                hl.Name = "ESP_Highlight"
+                if player.Team == LocalPlayer.Team then
+                    hl.FillColor = Color3.fromRGB(0, 0, 255)
+                    hl.OutlineColor = Color3.fromRGB(0, 0, 255)
+                else
+                    hl.FillColor = Color3.fromRGB(255, 0, 0)
+                    hl.OutlineColor = Color3.fromRGB(255, 0, 0)
+                end
+                hl.FillTransparency = 0.5
+                hl.OutlineTransparency = 0
+                hl.Adornee = char
+                hl.Parent = char
 
-RunService.RenderStepped:Connect(function()
-    frameCounter += 1
-    if frameCounter % 2 ~= 0 then return end
+                -- Enemy alert (!)
+                local alertGui = head:FindFirstChild("EnemyAlert")
+                if player.Team ~= LocalPlayer.Team and isVisible(char) then
+                    if not alertGui then
+                        alertGui = Instance.new("BillboardGui")
+                        alertGui.Name = "EnemyAlert"
+                        alertGui.Size = UDim2.new(0, 50, 0, 50)
+                        alertGui.StudsOffset = Vector3.new(0, 2.5, 0)
+                        alertGui.AlwaysOnTop = true
+                        alertGui.Parent = head
 
-    PlayerListFrame.Visible = activeMode == "GoG"
-    for _, highlight in pairs(highlights) do
-        if highlight and highlight.Parent then
-            highlight:Destroy()
-        end
-    end
-    highlights = {}
-
-    if activeMode == "DoW" then
-        for _, player in ipairs(Players:GetPlayers()) do
-            if player ~= LocalPlayer and player.Character then
-                local head = player.Character:FindFirstChild("Head")
-                local hum = player.Character:FindFirstChild("Humanoid")
-                if head and hum and hum.Health > 0 then
-                    if not isBehindWall(head) then
-                        local color = player.Team == LocalPlayer.Team and Color3.fromRGB(0,0,255) or Color3.fromRGB(255,0,0)
-                        highlights[player] = createHighlight(player.Character, color)
+                        local textLabel = Instance.new("TextLabel")
+                        textLabel.Size = UDim2.new(1, 0, 1, 0)
+                        textLabel.BackgroundTransparency = 1
+                        textLabel.Text = "!"
+                        textLabel.TextColor3 = Color3.new(1, 0, 0)
+                        textLabel.TextStrokeTransparency = 0
+                        textLabel.TextScaled = true
+                        textLabel.Font = Enum.Font.ArialBold
+                        textLabel.Parent = alertGui
                     end
+                elseif alertGui then
+                    alertGui:Destroy()
                 end
             end
         end
-        currentTarget = getNearestEnemy()
-        if currentTarget and currentTarget.Parent then
-            Camera.CFrame = Camera.CFrame:Lerp(CFrame.new(Camera.CFrame.Position, currentTarget.Position), 0.2)
-        end
+    end
+end
 
-    elseif activeMode == "GoG" then
-        updatePlayerList()
-        for _, player in ipairs(Players:GetPlayers()) do
-            if player ~= LocalPlayer and player.Character and not excludedPlayers[player.UserId] then
-                highlights[player] = createHighlight(player.Character, Color3.fromRGB(0,255,0))
-            end
-        end
+-- Add Jump Button (with 190 jump power = 90 + 100)
+local function addJumpButton()
+    local jumpBtn = Instance.new("TextButton")
+    jumpBtn.Size = UDim2.new(0, 80, 0, 80)
+    jumpBtn.Position = UDim2.new(1, -90, 1, -90)
+    jumpBtn.AnchorPoint = Vector2.new(0, 0)
+    jumpBtn.Text = "Jump"
+    jumpBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+    jumpBtn.TextColor3 = Color3.new(1, 1, 1)
+    jumpBtn.TextScaled = true
+    jumpBtn.BorderSizePixel = 0
+    jumpBtn.Parent = ScreenGui
 
-    elseif activeMode == "HnS" then
-        for _, player in ipairs(Players:GetPlayers()) do
-            if player ~= LocalPlayer and player.Character then
-                highlights[player] = createHighlight(player.Character, Color3.fromRGB(0,0,255))
-            end
+    jumpBtn.MouseButton1Click:Connect(function()
+        local char = LocalPlayer.Character
+        if char and char:FindFirstChild("Humanoid") then
+            local humanoid = char.Humanoid
+            local originalJumpPower = humanoid.JumpPower
+            humanoid.JumpPower = 190 -- updated jump power
+            humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+            task.delay(0.5, function()
+                if humanoid then
+                    humanoid.JumpPower = originalJumpPower
+                end
+            end)
+        end
+    end)
+end
+addJumpButton()
+
+-- Main Loop
+RunService.RenderStepped:Connect(function()
+    refreshESP()
+    if AimEnabled then
+        local targetHead = getClosestTarget()
+        if targetHead and Camera then
+            Camera.CFrame = CFrame.new(Camera.CFrame.Position, targetHead.Position)
         end
     end
 end)
-
-print("Universal Game Script UI Loaded — Everything Fixed, Baba!")
